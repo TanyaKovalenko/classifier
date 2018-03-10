@@ -28,7 +28,6 @@ VALIDATION_SPLIT = 0.2
 print('Indexing word vectors.')
 
 embeddings_index = {}
-all_words = set()
 word_model = gensim.models.KeyedVectors.load_word2vec_format("W2V_vectors.bin", binary=True)
 #word_model = gensim.models.KeyedVectors.load_word2vec_format("MORPHEME_W2V_vectors.bin", binary=True)
 model_size = len(word_model.wv.vocab)
@@ -65,7 +64,7 @@ for dir in os.listdir(INPUT_DIR):
                         if letter in S:
                             new_word += letter
                     new_word = new_word.strip()
-                    if (len(new_word) and (new_word in all_words)):
+                    if (len(new_word) and (new_word in word_model.wv.vocab)):
                         train_text = train_text + new_word + " "
 
         train_text = train_text.strip()
