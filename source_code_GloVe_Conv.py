@@ -95,7 +95,7 @@ for inx in range(5):
 
     categorical_labels = to_categorical(np.asarray(to_categorical_labels))
     print('Shape of data tensor:', data.shape)
-    print('Shape of label tensor:', labels.shape)
+    print('Shape of label tensor:', categorical_labels.shape)
 
     # split the data into a training set and a validation set
     indices = np.arange(data.shape[0])
