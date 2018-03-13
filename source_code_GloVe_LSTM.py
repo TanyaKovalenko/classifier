@@ -15,11 +15,9 @@ from keras.utils import to_categorical
 from keras.layers import Dense, Embedding
 from keras.models import Sequential
 from keras.layers.recurrent import LSTM
+from keras.callbacks import CSVLogger
 
-MAX_SEQUENCE_LENGTH = 1000
-MAX_NUM_WORDS = 20000
-EMBEDDING_DIM = 300
-VALIDATION_SPLIT = 0.2
+csv_logger = CSVLogger('glove_lstm_log.csv', append=True, separator=';')
 
 # first, build index mapping words in the embeddings set
 # to their embedding vector
@@ -77,71 +75,81 @@ for dir in os.listdir(INPUT_DIR):
 
 print('Found %s texts.' % len(texts))
 
-# finally, vectorize the text samples into a 2D integer tensor
-tokenizer = Tokenizer(num_words=MAX_NUM_WORDS)
-tokenizer.fit_on_texts(texts)
-sequences = tokenizer.texts_to_sequences(texts)
+MAX_SEQUENCE_LENGTH = 0
+text_to_tokenizer = texts
+to_categorical_labels = labels
+for inx in range(5):
+    MAX_SEQUENCE_LENGTH += 500
+    MAX_NUM_WORDS = 20000
+    EMBEDDING_DIM = 300
+    VALIDATION_SPLIT = 0.2
+    # finally, vectorize the text samples into a 2D integer tensor
+    tokenizer = Tokenizer(num_words=MAX_NUM_WORDS)
+    tokenizer.fit_on_texts(text_to_tokenizer)
+    sequences = tokenizer.texts_to_sequences(text_to_tokenizer)
 
-word_index = tokenizer.word_index
-print('Found %s unique tokens.' % len(word_index))
+    word_index = tokenizer.word_index
+    print('Found %s unique tokens.' % len(word_index))
 
-data = pad_sequences(sequences, maxlen=MAX_SEQUENCE_LENGTH)
+    data = pad_sequences(sequences, maxlen=MAX_SEQUENCE_LENGTH)
 
-labels = to_categorical(np.asarray(labels))
-print('Shape of data tensor:', data.shape)
-print('Shape of label tensor:', labels.shape)
+    categorical_labels = to_categorical(np.asarray(to_categorical_labels))
+    print('Shape of data tensor:', data.shape)
+    print('Shape of label tensor:', categorical_labels.shape)
 
-# split the data into a training set and a validation set
-indices = np.arange(data.shape[0])
-np.random.shuffle(indices)
-data = data[indices]
-labels = labels[indices]
-num_validation_samples = int(VALIDATION_SPLIT * data.shape[0])
+    # split the data into a training set and a validation set
+    indices = np.arange(data.shape[0])
+    np.random.shuffle(indices)
+    data = data[indices]
+    categorical_labels = categorical_labels[indices]
+    num_validation_samples = int(VALIDATION_SPLIT * data.shape[0])
 
-x_train = data[:-num_validation_samples]
-y_train = labels[:-num_validation_samples]
-x_val = data[-num_validation_samples:]
-y_val = labels[-num_validation_samples:]
+    x_train = data[:-num_validation_samples]
+    y_train = categorical_labels[:-num_validation_samples]
+    x_val = data[-num_validation_samples:]
+    y_val = categorical_labels[-num_validation_samples:]
 
-print('Preparing embedding matrix.')
+    print('Preparing embedding matrix.')
 
-# prepare embedding matrix
-num_words = min(MAX_NUM_WORDS, len(word_index) + 1)
-embedding_matrix = np.zeros((num_words, EMBEDDING_DIM))
-for word, i in word_index.items():
-    if i >= MAX_NUM_WORDS:
-        continue
-    embedding_vector = embeddings_index.get(word)
-    if embedding_vector is not None:
-        # words not found in embedding index will be all-zeros.
-        embedding_matrix[i] = embedding_vector
+    # prepare embedding matrix
+    num_words = min(MAX_NUM_WORDS, len(word_index) + 1)
+    embedding_matrix = np.zeros((num_words, EMBEDDING_DIM))
+    for word, i in word_index.items():
+        if i >= MAX_NUM_WORDS:
+            continue
+        embedding_vector = embeddings_index.get(word)
+        if embedding_vector is not None:
+            # words not found in embedding index will be all-zeros.
+            embedding_matrix[i] = embedding_vector
 
-# load pre-trained word embeddings into an Embedding layer
-# note that we set trainable = False so as to keep the embeddings fixed
-embedding_layer = Embedding(num_words,
-                            EMBEDDING_DIM,
-                            weights=[embedding_matrix],
-                            input_length=MAX_SEQUENCE_LENGTH,
-                            trainable=False)
+    # load pre-trained word embeddings into an Embedding layer
+    # note that we set trainable = False so as to keep the embeddings fixed
+    embedding_layer = Embedding(num_words,
+                                EMBEDDING_DIM,
+                                weights=[embedding_matrix],
+                                input_length=MAX_SEQUENCE_LENGTH,
+                                trainable=False)
 
-print('Training model.')
+    print('Training model.')
 
-# train a 1D convnet with global maxpooling
-model = Sequential()
-model.add(embedding_layer)
-model.add(LSTM(128))
-model.add(Dense(dir_inx, activation='softmax'))
+    # train a 1D convnet with global maxpooling
+    model = Sequential()
+    model.add(embedding_layer)
+    model.add(LSTM(128))
+    model.add(Dense(dir_inx, activation='softmax'))
 
-model.compile(loss='categorical_crossentropy',
-              optimizer='rmsprop',
-              metrics=['acc'])
+    model.compile(loss='categorical_crossentropy',
+                  optimizer='rmsprop',
+                  metrics=['acc'])
 
-model.fit(x_train, y_train,
-          batch_size=128,
-          epochs=10,
-          validation_data=(x_val, y_val))
+    model.fit(x_train, y_train,
+              batch_size=128,
+              epochs=5,
+              validation_data=(x_val, y_val))
 
-scores = model.evaluate(x_val, y_val)
-print("Точность на тестовых данных: %.2f%%" % (scores[1] * 100))
-result = model.predict(x_val)
-print(np.argmax(result, axis=1))
+    scores = model.evaluate(x_val, y_val)
+
+    log_file = open('glove_lstm_log.csv', 'a')
+    log_file.write("MAX_NUM_WORDS = %d \n" % MAX_SEQUENCE_LENGTH)
+    log_file.write("Точность на тестовых данных: %.2f%% \n" % (scores[1] * 100))
+    log_file.close()
